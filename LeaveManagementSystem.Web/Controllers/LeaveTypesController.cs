@@ -1,31 +1,19 @@
-using AutoMapper;
-
-using LeaveManagementSystem.Web.Data;
 using LeaveManagementSystem.Web.Models.LeaveTypes;
+using LeaveManagementSystem.Web.Services;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaveManagementSystem.Web.Controllers;
 
-public class LeaveTypesController : Controller
+public class LeaveTypesController(ILeaveTypeService leaveTypeService) : Controller
 {
-    private readonly ApplicationDbContext _context;
-    private readonly IMapper _mapper;
-
     private const string _nameExistsValidationMessage = "This leave type name already exists in the database.";
-
-    public LeaveTypesController(ApplicationDbContext context, IMapper mapper)
-    {
-        _context = context;
-        _mapper = mapper;
-    }
 
     // GET: LEAVETYPES
     public async Task<IActionResult> Index()
     {
-        List<LeaveType> data = await _context.LeaveTypes.ToListAsync();
-        var viewData = _mapper.Map<List<LeaveTypeReadOnlyVM>>(data);
+        List<LeaveTypeReadOnlyVM> viewData = await leaveTypeService.GetAll();
 
         return View(viewData);
     }
@@ -38,16 +26,13 @@ public class LeaveTypesController : Controller
             return NotFound();
         }
 
-        var leavetype = await _context.LeaveTypes
-            .FirstOrDefaultAsync(m => m.Id == id);
+        var leavetype = await leaveTypeService.Get<LeaveTypeReadOnlyVM>(id.Value);
         if (leavetype == null)
         {
             return NotFound();
         }
 
-        var viewData = _mapper.Map<LeaveTypeReadOnlyVM>(leavetype);
-
-        return View(viewData);
+        return View(leavetype);
     }
 
     // GET: LEAVETYPES/Create
@@ -63,19 +48,18 @@ public class LeaveTypesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create([Bind("Name,NumberOfDays")] LeaveTypeCreateVM createVm)
     {
-        if (await CheckIfLeaveTypeNameExists(createVm.Name))
+        if (await leaveTypeService.CheckIfLeaveTypeNameExists(createVm.Name))
         {
             ModelState.AddModelError(nameof(createVm.Name), _nameExistsValidationMessage);
         }
 
-        if (ModelState.IsValid)
+        if (!ModelState.IsValid)
         {
-            var leavetype = _mapper.Map<LeaveType>(createVm);
-            _context.Add(leavetype);
-            await _context.SaveChangesAsync();
-            return RedirectToAction(nameof(Index));
+            return View(createVm);
         }
-        return View(createVm);
+
+        await leaveTypeService.Create(createVm);
+        return RedirectToAction(nameof(Index));
     }
 
     // GET: LEAVETYPES/Edit/5
@@ -86,14 +70,13 @@ public class LeaveTypesController : Controller
             return NotFound();
         }
 
-        var leavetype = await _context.LeaveTypes.FindAsync(id);
+        var leavetype = await leaveTypeService.Get<LeaveTypeEditVM>(id.Value);
         if (leavetype == null)
         {
             return NotFound();
         }
 
-        var editVm = _mapper.Map<LeaveTypeEditVM>(leavetype);
-        return View(editVm);
+        return View(leavetype);
     }
 
     // POST: LEAVETYPES/Edit/5
@@ -108,33 +91,30 @@ public class LeaveTypesController : Controller
             return NotFound();
         }
 
-        if (await CheckIfLeaveTypeNameExistsForEdit(editVm.Name, editVm.Id))
+        if (await leaveTypeService.CheckIfLeaveTypeNameExistsForEdit(editVm.Name, editVm.Id))
         {
             ModelState.AddModelError(nameof(editVm.Name), _nameExistsValidationMessage);
         }
 
-        if (ModelState.IsValid)
+        if (!ModelState.IsValid)
         {
-            try
-            {
-                var leavetype = _mapper.Map<LeaveType>(editVm);
-                _context.Update(leavetype);
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!LeaveTypeExists(editVm.Id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-            return RedirectToAction(nameof(Index));
+            return View(editVm);
         }
-        return View(editVm);
+
+        try
+        {
+            await leaveTypeService.Edit(editVm);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            if (!await leaveTypeService.LeaveTypeExists(editVm.Id))
+            {
+                return NotFound();
+            }
+
+            throw;
+        }
+        return RedirectToAction(nameof(Index));
     }
 
     // GET: LEAVETYPES/Delete/5
@@ -145,15 +125,13 @@ public class LeaveTypesController : Controller
             return NotFound();
         }
 
-        var leavetype = await _context.LeaveTypes
-            .FirstOrDefaultAsync(m => m.Id == id);
+        var leavetype = await leaveTypeService.Get<LeaveTypeReadOnlyVM>(id.Value);
         if (leavetype == null)
         {
             return NotFound();
         }
 
-        var deleteVm = _mapper.Map<LeaveTypeReadOnlyVM>(leavetype);
-        return View(deleteVm);
+        return View(leavetype);
     }
 
     // POST: LEAVETYPES/Delete/5
@@ -161,28 +139,12 @@ public class LeaveTypesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(int? id)
     {
-        var leavetype = await _context.LeaveTypes.FindAsync(id);
-        if (leavetype != null)
+        if (id == null)
         {
-            _context.LeaveTypes.Remove(leavetype);
+            return NotFound();
         }
 
-        await _context.SaveChangesAsync();
+        await leaveTypeService.Remove(id.Value);
         return RedirectToAction(nameof(Index));
-    }
-
-    private bool LeaveTypeExists(int? id)
-    {
-        return _context.LeaveTypes.Any(e => e.Id == id);
-    }
-
-    private async Task<bool> CheckIfLeaveTypeNameExists(string name)
-    {
-        return await _context.LeaveTypes.AnyAsync(x => x.Name.ToLower().Equals(name.ToLower()));
-    }
-
-    private async Task<bool> CheckIfLeaveTypeNameExistsForEdit(string name, int id)
-    {
-        return await _context.LeaveTypes.AnyAsync(x => x.Name.ToLower().Equals(name.ToLower()) && x.Id != id);
     }
 }
