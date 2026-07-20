@@ -1,11 +1,13 @@
 using LeaveManagementSystem.Web.Models.LeaveTypes;
 using LeaveManagementSystem.Web.Services;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace LeaveManagementSystem.Web.Controllers;
 
+[Authorize(Roles = Roles.Administrator)]
 public class LeaveTypesController(ILeaveTypeService leaveTypeService) : Controller
 {
     private const string _nameExistsValidationMessage = "This leave type name already exists in the database.";
